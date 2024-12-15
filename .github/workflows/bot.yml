@@ -1,8 +1,6 @@
 name: Reddit Bot
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'  # This runs the bot every 5 minutes
   workflow_dispatch:  # This allows you to manually trigger the workflow
 
 jobs:
