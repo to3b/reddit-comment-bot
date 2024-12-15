@@ -13,8 +13,8 @@ if not (REDDIT_USERNAME and REDDIT_PASSWORD and REDDIT_CLIENT_ID and REDDIT_CLIE
     exit(1)
 
 # Bot configuration
-TARGET_SUBREDDIT = "CucumberBotTestSub"  # Replace with your desired subreddit
-TARGET_STRING = "test"  # Replace with your desired search string
+TARGET_SUBREDDIT = "AnarchyChess"  # Replace with your desired subreddit
+TARGET_STRING = "google en passant"  # Replace with your desired search string
 REPLY_MESSAGE = """
 Okay, I just can’t do this anymore. Do you want me to say “holy hell” like every other free thinking NPC on this godforsaken website?
 
