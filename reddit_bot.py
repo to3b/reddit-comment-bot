@@ -1,6 +1,5 @@
 import os
 import praw
-import prawcore
 import time
 import logging
 from config import (
@@ -19,20 +18,6 @@ from config import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Function to handle rate limit with exponential backoff
-def handle_rate_limit(api_exception, retry_attempts=3):
-    for attempt in range(retry_attempts):
-        retry_after = api_exception.response.headers.get('retry-after')
-        if retry_after:
-            logger.warning(f"Rate limited. Retrying after {retry_after} seconds. Attempt {attempt + 1}/{retry_attempts}")
-            time.sleep(int(retry_after) + 1)
-        else:
-            logger.error(f"API Exception: {api_exception}")
-            break
-    else:
-        logger.error("Exceeded retry attempts. Aborting.")
-        raise
-
 # Function to log in to Reddit
 def bot_login():
     logger.info("Logging in...")
@@ -47,96 +32,63 @@ def bot_login():
         )
         logger.info("Logged in!")
         return reddit_instance
-    except prawcore.exceptions.ResponseException as e:
+    except Exception as e:
         logger.error(f"Login failed: {e}")
         raise
-    except Exception as e:
-        logger.exception(f"Unexpected error during login: {e}")
-        raise
-
-# Function to run the bot
-def run_bot(reddit_instance, comments_replied_to):
-    logger.info(f"Searching last 1,000 comments in subreddit {TARGET_SUBREDDIT}")
-
-    try:
-        process_comments(reddit_instance, comments_replied_to)
-    except praw.exceptions.APIException as api_exception:
-        # Handle rate limits
-        handle_rate_limit(api_exception)
-    except Exception as e:
-        # Log other exceptions
-        logger.exception(f"An error occurred: {e}")
-
-    logger.info(f"Sleeping for {SLEEP_DURATION} seconds...")
-    time.sleep(int(SLEEP_DURATION))
 
 # Function to process comments
 def process_comments(reddit_instance, comments_replied_to):
-    for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).comments(limit=1000):
-        try:
-            process_single_comment(comment, comments_replied_to)
-        except prawcore.exceptions.Forbidden as forbidden_error:
-            logger.warning(f"Permission error for comment {comment.id}: {forbidden_error}. Skipping.")
-        except Exception as error:
-            logger.exception(f"Error processing comment {comment.id}: {error}")
+    logger.info(f"Searching for new comments in subreddit {TARGET_SUBREDDIT}...")
 
-    # Log when the search is completed
-    logger.info("Search Completed.")
-    # Log the count of comments replied to
-    logger.info(f"Number of comments replied to: {len(comments_replied_to)}")
+    try:
+        for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).stream.comments():
+            process_single_comment(comment, comments_replied_to)
+    except Exception as e:
+        logger.error(f"Error while fetching comments: {e}")
 
 # Function to process a single comment
 def process_single_comment(comment, comments_replied_to):
-    # Convert both the comment body and the target string to lowercase for case-insensitive comparison
-    if (
-        TARGET_STRING.lower() in comment.body.lower()  # Convert both to lowercase
-        and comment.id not in comments_replied_to
-        and comment.author != reddit_instance.user.me()  # Ensure it doesn't reply to its own comment
-    ):
-        logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}")
-        try:
-            comment.reply(REPLY_MESSAGE)
-            logger.info(f"Replied to comment {comment.id}")
-            comments_replied_to.append(comment.id)
+    try:
+        if (
+            TARGET_STRING.lower() in comment.body.lower()  # Case-insensitive search
+            and comment.id not in comments_replied_to
+            and comment.author != reddit_instance.user.me()  # Prevent the bot from replying to its own comment
+        ):
+            logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}, replying...")
+            comment.reply(REPLY_MESSAGE)  # Reply with the predefined message
 
-            # Save the comment ID to the file to prevent replying again
+            # Log the comment ID that has been replied to
+            comments_replied_to.append(comment.id)
+            logger.info(f"Replied to comment {comment.id}")
+
+            # Save the comment ID to a file so it doesn't reply to it again in the future
             with open("comments_replied_to.txt", "a") as f:
                 f.write(comment.id + "\n")
-        except prawcore.exceptions.Forbidden as forbidden_error:
-            logger.warning(f"Permission error for comment {comment.id}: {forbidden_error}. Skipping.")
-        except Exception as reply_error:
-            logger.exception(f"Error while replying to comment {comment.id}: {reply_error}")
+    except Exception as e:
+        logger.error(f"Error replying to comment {comment.id}: {e}")
 
 # Function to get saved comments
 def get_saved_comments():
     if not os.path.isfile("comments_replied_to.txt"):
-        # If the file doesn't exist, initialize an empty list
         comments_replied_to = []
     else:
-        # Read the file and create a list of comments (excluding empty lines)
         with open("comments_replied_to.txt", "r") as f:
             comments_replied_to = [comment.strip() for comment in f.readlines() if comment.strip()]
-
     return comments_replied_to
 
-# Main block to execute the bot
+# Main function to run the bot
 if __name__ == "__main__":
-    # Log in to Reddit
     reddit_instance = bot_login()
-    # Get the list of comments the bot has replied to from the file
     comments_replied_to = get_saved_comments()
-    # Log the number of comments replied to
+
     logger.info(f"Number of comments replied to: {len(comments_replied_to)}")
 
-    # Run the bot in an infinite loop
     while True:
         try:
-            # Attempt to run the bot
-            run_bot(reddit_instance, comments_replied_to)
-        except Exception as e:
-            # Log any general exceptions and sleep for the specified duration
-            logger.exception(f"An error occurred: {e}")
-            time.sleep(int(SLEEP_DURATION))  # Add a sleep after catching general exceptions
+            process_comments(reddit_instance, comments_replied_to)
         except KeyboardInterrupt:
             logger.info("Bot terminated by user.")
             break
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            time.sleep(int(SLEEP_DURATION))  # Retry after a short delay
