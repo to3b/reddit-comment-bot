@@ -1,0 +1,2 @@
+praw==7.5.0  # Replace with the version you're using
+requests==2.28.1  # Optional, if your bot uses requests
