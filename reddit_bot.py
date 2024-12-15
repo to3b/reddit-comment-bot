@@ -78,7 +78,7 @@ def process_comments(reddit_instance, comments_replied_to):
     for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).comments(limit=1000):  # Increase limit to 1000
         logger.info(f"Checking comment: {comment.body[:100]}...")  # Log a snippet of the comment body for visibility
         try:
-            if TARGET_STRING in comment.body:
+            if TARGET_STRING in (comment.body).lower():
                 logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}")
                 process_single_comment(comment, comments_replied_to)
         except prawcore.exceptions.Forbidden as forbidden_error:
