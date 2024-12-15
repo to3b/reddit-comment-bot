@@ -1,8 +1,7 @@
-from __future__ import print_function
+import os
 import praw
 import prawcore
 import time
-import os
 import logging
 from config import (
     REDDIT_USERNAME,
@@ -46,7 +45,7 @@ def bot_login():
             client_secret=REDDIT_CLIENT_SECRET,
             user_agent=REDDIT_USER_AGENT
         )
-        logger.info(f"Logged in as {reddit_instance.user.me()}")
+        logger.info("Logged in!")
         return reddit_instance
     except prawcore.exceptions.ResponseException as e:
         logger.error(f"Login failed: {e}")
@@ -73,14 +72,9 @@ def run_bot(reddit_instance, comments_replied_to):
 
 # Function to process comments
 def process_comments(reddit_instance, comments_replied_to):
-    logger.info(f"Searching last 1,000 comments in subreddit {TARGET_SUBREDDIT}")
-
-    for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).comments(limit=1000):  # Increase limit to 1000
-        logger.info(f"Checking comment: {comment.body[:100]}...")  # Log a snippet of the comment body for visibility
+    for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).comments(limit=1000):
         try:
-            if TARGET_STRING in (comment.body).lower():
-                logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}")
-                process_single_comment(comment, comments_replied_to)
+            process_single_comment(comment, comments_replied_to)
         except prawcore.exceptions.Forbidden as forbidden_error:
             logger.warning(f"Permission error for comment {comment.id}: {forbidden_error}. Skipping.")
         except Exception as error:
@@ -93,20 +87,19 @@ def process_comments(reddit_instance, comments_replied_to):
 
 # Function to process a single comment
 def process_single_comment(comment, comments_replied_to):
-    logger.info(f"Attempting to process comment {comment.id}...")
-
+    # Convert both the comment body and the target string to lowercase for case-insensitive comparison
     if (
-        TARGET_STRING in comment.body
+        TARGET_STRING.lower() in comment.body.lower()  # Convert both to lowercase
         and comment.id not in comments_replied_to
-        and comment.author != reddit_instance.user.me()  # Ensure it's not the bot's own comment
+        and comment.author != reddit_instance.user.me()  # Ensure it doesn't reply to its own comment
     ):
-        logger.info(f"String with '{TARGET_STRING}' found in comment {comment.id}. Attempting to reply...")
+        logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}")
         try:
             comment.reply(REPLY_MESSAGE)
             logger.info(f"Replied to comment {comment.id}")
-
             comments_replied_to.append(comment.id)
 
+            # Save the comment ID to the file to prevent replying again
             with open("comments_replied_to.txt", "a") as f:
                 f.write(comment.id + "\n")
         except prawcore.exceptions.Forbidden as forbidden_error:
@@ -124,7 +117,6 @@ def get_saved_comments():
         with open("comments_replied_to.txt", "r") as f:
             comments_replied_to = [comment.strip() for comment in f.readlines() if comment.strip()]
 
-    logger.info(f"Loaded {len(comments_replied_to)} comments from the saved list.")
     return comments_replied_to
 
 # Main block to execute the bot
