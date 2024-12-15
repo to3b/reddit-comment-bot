@@ -36,36 +36,35 @@ def bot_login():
         logger.error(f"Login failed: {e}")
         raise
 
-# Function to process comments
-def process_comments(reddit_instance, comments_replied_to):
-    logger.info(f"Searching for new comments in subreddit {TARGET_SUBREDDIT}...")
+# Function to process the most recent comment
+def process_most_recent_comment(reddit_instance, comments_replied_to):
+    logger.info(f"Searching for the most recent comment in subreddit {TARGET_SUBREDDIT}...")
 
     try:
-        for comment in reddit_instance.subreddit(TARGET_SUBREDDIT).stream.comments():
-            process_single_comment(comment, comments_replied_to)
-    except Exception as e:
-        logger.error(f"Error while fetching comments: {e}")
+        # Get the most recent comment
+        recent_comment = next(reddit_instance.subreddit(TARGET_SUBREDDIT).comments(limit=1))
 
-# Function to process a single comment
-def process_single_comment(comment, comments_replied_to):
-    try:
+        logger.info(f"Checking comment: {recent_comment.body[:50]}...")  # Log first 50 characters
+
+        # Check if the target string is in the comment and it's not already replied to
         if (
-            TARGET_STRING.lower() in comment.body.lower()  # Case-insensitive search
-            and comment.id not in comments_replied_to
-            and comment.author != reddit_instance.user.me()  # Prevent the bot from replying to its own comment
+            TARGET_STRING.lower() in recent_comment.body.lower()  # Case-insensitive search
+            and recent_comment.id not in comments_replied_to
+            and recent_comment.author != reddit_instance.user.me()  # Prevent the bot from replying to its own comment
         ):
-            logger.info(f"String '{TARGET_STRING}' found in comment {comment.id}, replying...")
-            comment.reply(REPLY_MESSAGE)  # Reply with the predefined message
+            logger.info(f"String '{TARGET_STRING}' found in comment {recent_comment.id}, replying...")
+            recent_comment.reply(REPLY_MESSAGE)  # Reply with the predefined message
 
             # Log the comment ID that has been replied to
-            comments_replied_to.append(comment.id)
-            logger.info(f"Replied to comment {comment.id}")
+            comments_replied_to.append(recent_comment.id)
+            logger.info(f"Replied to comment {recent_comment.id}")
 
             # Save the comment ID to a file so it doesn't reply to it again in the future
             with open("comments_replied_to.txt", "a") as f:
-                f.write(comment.id + "\n")
+                f.write(recent_comment.id + "\n")
+
     except Exception as e:
-        logger.error(f"Error replying to comment {comment.id}: {e}")
+        logger.error(f"Error while processing the most recent comment: {e}")
 
 # Function to get saved comments
 def get_saved_comments():
@@ -85,7 +84,8 @@ if __name__ == "__main__":
 
     while True:
         try:
-            process_comments(reddit_instance, comments_replied_to)
+            # Check for the most recent comment and process it
+            process_most_recent_comment(reddit_instance, comments_replied_to)
         except KeyboardInterrupt:
             logger.info("Bot terminated by user.")
             break
